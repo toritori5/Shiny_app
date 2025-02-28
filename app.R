@@ -1,12 +1,10 @@
-library(shiny)
-library(bslib)
-library(Seurat)
-library(ggplot2)
-library(dplyr)
-library(bsicons)
-library(plotly)
-library(presto)
-library(DT)
+list_of_packages <- c("shiny", "bslib", "Seurat", "ggplot2", "dplyr", "bsicons", "plotly", "presto", "DT")
+
+new_packages <- list_of_packages[!(list_of_packages %in% installed.packages()[,"Package"])]
+
+if(length(new_packages)) install.packages(new_packages)
+
+invisible(lapply(list_of_packages, library, character.only = TRUE))
 
 # --- Load Data BEFORE ui or server (NON-REACTIVE) ---
 load("/Volumes/DMGE$/teamfolder/Shiny_sc/sc_obj.RData")  # Correct path.  This MUST be a valid path!
