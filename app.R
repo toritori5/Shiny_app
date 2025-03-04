@@ -21,7 +21,7 @@ Rpl.genes <- grep(pattern = "^Rpl", x = rownames(x = sc_obj@assays$RNA), value =
 mito.genes <- grep(pattern = "^mt-", x = rownames(x = sc_obj@assays$RNA), value = TRUE)
 pseudo.genes <- grep(pattern = "^Gm", x = rownames(x = sc_obj@assays$RNA), value = TRUE)
 blood.genes <- c('Hbb-y', 'Hba-a1', 'Hbb-x', 'Hbb-bh1', 'Hba-a2', 'Hbb-bh1', "Hba-x", "Hbb-bs", "Hbb-bt")
-removal <- read.csv(file = "/Volumes/DMGE$/teamfolder/Shiny_sc/remove.csv", header = F) #make sure the path is right
+removal <- read.csv(file = "/Users/victorio/ShinyApp/sc_app/remove.csv", header = F) #make sure the path is right
 ychrom <- removal$V2
 ychrom <- ychrom[1:1555]
 xchrom <- removal$V3
@@ -148,12 +148,11 @@ ui <- fluidPage(
   )
 )
 
-
+# Define the server ####
 server <- function(input, output, session) {
   
-# Precompute top markers (outside reactive context, since data is loaded once)
-  cluster_markers_identity <- FindAllMarkers(sc_obj, features = genes_to_test, only.pos = TRUE, min.pct = 0.25, logfc.threshold = log(1.2))
-  top10_cluster_markers_identity <- cluster_markers_identity %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+  # Create a reactiveVal to store the markers
+  top10_markers <- reactiveVal(NULL)
   
   # --- Update FeaturePlot and VlnPlot on Button Click ---
   observeEvent(input$updatePlot, {
@@ -228,59 +227,63 @@ server <- function(input, output, session) {
   observeEvent(input$run_de, {
     req(input$identity_test, input$genotype1, input$genotype2)
     
-    # Subset Seurat object
-    subset_obj <- subset(sc_obj, idents = c(input$identity_test))
-    subset_obj <- subset(subset_obj, subset = genotype %in% c(input$genotype1, input$genotype2))
-    
-    # Normalize, Find Variable Features, and Scale Data (within the subset)
-    subset_obj <- NormalizeData(subset_obj) %>%
-      FindVariableFeatures() %>%
-      ScaleData(vars.to.regress = c("nCount_RNA", "nFeature_RNA", "percent.mt", "S.Score", "G2M.Score", "orig.ident"))
-    
-    # Run DE analysis and create de_wilcox object
-    tryCatch({
-      de_wilcox <- wilcoxauc(subset_obj, group_by = "genotype") %>%
-        filter(group == input$genotype2) %>%
-        mutate(DE = abs(logFC) > log(1.1) & padj < 0.01) %>%
-        mutate(DEG = ifelse(DE, feature, NA))
+    withProgress(message = "Calculating Differential Expression...", value = 0, {
+      # Subset Seurat object
+      subset_obj <- subset(sc_obj, idents = c(input$identity_test))
+      subset_obj <- subset(subset_obj, subset = genotype %in% c(input$genotype1, input$genotype2))
+      incProgress(0.1, detail = "Subsetting data...")
       
-      
-      # Get initial axis limits
-      initial_xlim <- c(min(de_wilcox$logFC), max(de_wilcox$logFC))
-      initial_ylim <- c(0, max(-log10(de_wilcox$padj)))
-      
-      # Update numericInputs with initial values
-      updateNumericInput(session, "xlim_min", value = round(initial_xlim[1],2))
-      updateNumericInput(session, "xlim_max", value = round(initial_xlim[2],2))
-      updateNumericInput(session, "ylim_max", value = round(initial_ylim[2],2))
-      
-      # Render DE results table
-      output$de_results <- DT::renderDataTable({
-        de_wilcox %>% arrange(padj)  #Show results, ordered by p-adj
+      # Normalize, Find Variable Features, and Scale Data
+      subset_obj <- NormalizeData(subset_obj) %>%
+        FindVariableFeatures() %>%
+        ScaleData(vars.to.regress = c("nCount_RNA", "nFeature_RNA", "percent.mt", "S.Score", "G2M.Score", "orig.ident"))
+      incProgress(0.3, detail = "Normalizing data...")
+      # Run DE analysis
+      tryCatch({
+        de_wilcox <- wilcoxauc(subset_obj, group_by = "genotype") %>%
+          filter(group == input$genotype2) %>%
+          mutate(DE = abs(logFC) > log(1.1) & padj < 0.01) %>%
+          mutate(DEG = ifelse(DE, feature, NA))
+        incProgress(0.7, detail = "Calculating DE...")
+        
+        # Get initial axis limits
+        initial_xlim <- c(min(de_wilcox$logFC), max(de_wilcox$logFC))
+        initial_ylim <- c(0, max(-log10(de_wilcox$padj)))
+        
+        # Update numericInputs with initial values
+        updateNumericInput(session, "xlim_min", value = round(initial_xlim[1],2))
+        updateNumericInput(session, "xlim_max", value = round(initial_xlim[2],2))
+        updateNumericInput(session, "ylim_max", value = round(initial_ylim[2],2))
+        
+        # Render DE results table (inside tryCatch)
+        output$de_results <- DT::renderDataTable({
+          de_wilcox %>% arrange(padj)
+        })
+        
+        
+        # Render Volcano Plot (inside tryCatch, with dynamic limits)
+        output$de_volcano <- renderPlot({
+          ggplot(de_wilcox, aes(x = logFC, y = -log10(padj), col = DE, label = DEG)) +
+            geom_point() +
+            ggrepel::geom_text_repel() +
+            geom_vline(xintercept = c(-log(1.1), log(1.1), 0), linetype = "dotted") +
+            geom_hline(yintercept = -log10(0.01), linetype = "dotted") +
+            scale_color_manual(values = c("#909090", "red")) +
+            theme_minimal() +
+            xlim(input$xlim_min, input$xlim_max) +
+            ylim(0, input$ylim_max)
+        })
+        incProgress(1.0, detail = "Rendering plot...") # Complete
+        
+      }, error = function(e) {
+        # ... (error handling, same as before) ...
+        output$de_volcano <- renderPlot({
+          ggplot() +
+            geom_text(aes(x = 0.5, y = 0.5, label = paste("Error in DE:", e$message)), size = 5) +
+            theme_void()
+        })
+        output$de_results <- DT::renderDataTable(NULL)
       })
-      
-      output$de_volcano <- renderPlot({
-        ggplot(de_wilcox, aes(x = logFC, y = -log10(padj), col = DE, label = DEG)) +
-          geom_point() +
-          ggrepel::geom_text_repel() +
-          geom_vline(xintercept = c(-log(1.1), log(1.1), 0), col = "#303030", linetype = "dotted") +
-          geom_hline(yintercept = -log10(0.01), col = "#303030", linetype = "dotted") +
-          scale_color_manual(values = c("#909090", "red")) +
-          theme_minimal() +
-          # Apply dynamic axis limits
-          xlim(input$xlim_min, input$xlim_max) +
-          ylim(0, input$ylim_max)
-      })
-      
-    }, error = function(e) {
-      #Error handling
-      output$de_volcano <- renderPlot({
-        ggplot() +
-          geom_text(aes(x = 0.5, y = 0.5, label = paste("Error in DE:", e$message)), size = 5) +
-          theme_void()
-      })
-      output$de_results <- DT::renderDataTable(NULL)
-      
     })
   })
   
@@ -415,19 +418,6 @@ server <- function(input, output, session) {
     }
   )
   
-  output$downloadHeatmap <- downloadHandler(
-    filename = function() {
-      paste("Heatmap_", Sys.Date(), ".pdf", sep = "")
-    },
-    content = function(file) {
-      pdf(file, width = 6, height = 8)
-      if (!is.null(top10_cluster_markers_identity)) { # Check if markers are available
-        print(DoHeatmap(sc_obj, features = top10_cluster_markers_identity$gene) +
-                theme(axis.text.y = element_text(size = 8)))
-      }
-      dev.off()
-    }
-  )
   
   # Cell count calculation (per genotype, for a given gene)
   output$cell_count_table <- renderTable({
@@ -453,26 +443,70 @@ server <- function(input, output, session) {
     DimPlot(sc_obj, group.by = 'identity', reduction = "umap", label = TRUE)
   })
   
-  # --- Show Heatmap in Modal ---
+  # --- Show Heatmap in Modal (and calculate markers) ---
   observeEvent(input$showHeatmap, {
+    
+    # 1. Show the modal *immediately* with a loading message
     showModal(modalDialog(
       title = "Heatmap of Top 10 Markers per Cluster",
-      plotOutput("heatmap", height = "700px"), # Render inside the modal
+      "Calculating markers and rendering heatmap...",  # Initial message
+      plotOutput("heatmap", height = "700px"), # Still include plotOutput
       easyClose = TRUE,
       footer = tagList(
         modalButton("Close"),
         downloadButton("downloadHeatmap", "Download Heatmap")
       )
     ))
+    
+    
+    # 2. Calculate Markers *INSIDE* the observeEvent, within withProgress
+    withProgress(message = "Calculating Markers...", value = 0, {
+      cluster_markers_identity <- FindAllMarkers(sc_obj, features = genes_to_test,
+                                                 only.pos = TRUE, min.pct = 0.25,
+                                                 logfc.threshold = log(1.2))
+      incProgress(0.6, detail = "Grouping Markers...")
+      top10 <- cluster_markers_identity %>%
+        group_by(cluster) %>%
+        top_n(n = 10, wt = avg_log2FC)
+      # 3. Store the results in the reactiveVal
+      top10_markers(top10)  # Store the calculated markers
+      incProgress(1.0, detail = "Done")
+    })
+    
+    # --- Render Heatmap (using the reactiveVal) ---
+    output$heatmap <- renderPlot({
+      req(top10_markers())  # Use req() to wait for markers
+      
+      DoHeatmap(sc_obj, features = top10_markers()$gene) +
+        theme(axis.text.y = element_text(size = 8))
+    })
   })
   
-  # --- Render Heatmap (INSIDE the observeEvent) ---
-  output$heatmap <- renderPlot({ # This is now INSIDE the modal
-    if (!is.null(top10_cluster_markers_identity)) {
-      DoHeatmap(sc_obj, features = top10_cluster_markers_identity$gene) +
-        theme(axis.text.y = element_text(size = 8))
+  # --- Download Handler (using the reactiveVal)
+  output$downloadHeatmap <- downloadHandler(
+    filename = function() {
+      paste("Heatmap_", Sys.Date(), ".pdf", sep = "")
+    },
+    content = function(file) {
+      req(top10_markers()) # Make sure markers exist.
+      pdf(file, width = 6, height = 8)
+      print(DoHeatmap(sc_obj, features = top10_markers()$gene) +
+              theme(axis.text.y = element_text(size = 8)))
+      dev.off()
     }
-  })
+  )
+  
+  # --- Download Markers ---
+  output$downloadMarkers <- downloadHandler(
+    filename = function() {
+      paste("Cluster_Markers_", Sys.Date(), ".csv", sep = "")
+    },
+    content = function(file) {
+      req(top10_markers()) #wait for markers
+      write.csv(top10_markers(), file, row.names = FALSE) # Use top10_markers()
+    }
+  )
+  
   
   
   output$scatterPlot <- renderPlot({
