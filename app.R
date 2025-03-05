@@ -557,6 +557,6 @@ server <- function(input, output, session) {
                   order = T, blend.threshold = 0.1)
     })
   })
-
+}
 
 shinyApp(ui = ui, server = server)
