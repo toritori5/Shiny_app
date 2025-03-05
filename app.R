@@ -163,8 +163,7 @@ server <- function(input, output, session) {
     # Stop the app to prevent it from running in the R console
     stopApp()
   })
-}
-  
+
   # Create a reactiveVal to store the markers
   top10_markers <- reactiveVal(NULL)
   
