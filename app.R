@@ -125,8 +125,8 @@ ui <- fluidPage(
                  plotOutput("blendedFeaturePlot"),
                  hr(), # Horizontal line for separation
                  fluidRow(
-                   column(6, textInput("gene1", "Gene 1:", value = "Msx1")),
-                   column(6, textInput("gene2", "Gene 2:", value = "Sox9"))
+                   column(6, textInput("gene1", "Gene 1:")),
+                   column(6, textInput("gene2", "Gene 2:"))
                  ),
                  actionButton("updateBlendedPlot", "Update Blended Plot") # Button to trigger plot update
                )
