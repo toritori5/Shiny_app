@@ -21,7 +21,7 @@ Rpl.genes <- grep(pattern = "^Rpl", x = rownames(x = sc_obj@assays$RNA), value =
 mito.genes <- grep(pattern = "^mt-", x = rownames(x = sc_obj@assays$RNA), value = TRUE)
 pseudo.genes <- grep(pattern = "^Gm", x = rownames(x = sc_obj@assays$RNA), value = TRUE)
 blood.genes <- c('Hbb-y', 'Hba-a1', 'Hbb-x', 'Hbb-bh1', 'Hba-a2', 'Hbb-bh1', "Hba-x", "Hbb-bs", "Hbb-bt")
-removal <- read.csv(file = "/Users/victorio/ShinyApp/sc_app/remove.csv", header = F) #make sure the path is right
+removal <- read.csv(file = "/Volumes/DMGE$/teamfolder/Shiny_sc/remove.csv", header = F) #make sure the path is right
 ychrom <- removal$V2
 ychrom <- ychrom[1:1555]
 xchrom <- removal$V3
