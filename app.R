@@ -150,20 +150,7 @@ ui <- fluidPage(
 
 # Define the server ####
 server <- function(input, output, session) {
-  observe({
-    # Get the URL of the Shiny app
-    appUrl <- session$clientData$url_hostname
-
-    # Construct the full URL
-    fullUrl <- paste0("http://", appUrl, ":", session$clientData$url_port)
-
-    # Open the URL in the default web browser
-    browseURL(fullUrl)
-
-    # Stop the app to prevent it from running in the R console
-    stopApp()
-  })
-
+  
   # Create a reactiveVal to store the markers
   top10_markers <- reactiveVal(NULL)
   
