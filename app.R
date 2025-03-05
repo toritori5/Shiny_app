@@ -546,4 +546,7 @@ server <- function(input, output, session) {
   })
 }
 
+# Force Shiny to open in an external browser
+options(shiny.launch.browser = .rs.browser)
+
 shinyApp(ui = ui, server = server)
