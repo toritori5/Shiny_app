@@ -95,17 +95,6 @@ ui <- fluidPage(
         )
       ),
       fluidRow(
-        column(12,
-               card(
-                 card_header(div(style = "text-align: center;", strong("Differential Expression Results"))),
-                 conditionalPanel(
-                   condition = "input.run_de > 0",
-                   DT::dataTableOutput("de_results")
-                 )
-               )
-        )
-      ),
-      fluidRow(
         column(6,
                card(
                  card_header(div(style = "text-align: center;", strong("FeaturePlot"))),
@@ -140,6 +129,17 @@ ui <- fluidPage(
                    column(6, textInput("gene2", "Gene 2:", value = "Sox9"))
                  ),
                  actionButton("updateBlendedPlot", "Update Blended Plot") # Button to trigger plot update
+               )
+        )
+      ),
+      fluidRow(
+        column(12,
+               card(
+                 card_header(div(style = "text-align: center;", strong("Differential Expression Results"))),
+                 conditionalPanel(
+                   condition = "input.run_de > 0",
+                   DT::dataTableOutput("de_results")
+                 )
                )
         )
       ),
