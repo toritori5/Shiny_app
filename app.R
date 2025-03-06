@@ -1,10 +1,13 @@
-list_of_packages <- c("shiny", "bslib", "Seurat", "ggplot2", "dplyr", "bsicons", "plotly", "presto", "DT")
+list_of_packages <- c("shiny", "bslib", "Seurat", "ggplot2", "dplyr", "bsicons", "plotly", "DT")
 
 new_packages <- list_of_packages[!(list_of_packages %in% installed.packages()[,"Package"])]
 
 if(length(new_packages)) install.packages(new_packages)
 
-invisible(lapply(list_of_packages, library, character.only = TRUE))
+if (!requireNamespace("devtools", quietly = TRUE)) install.packages("devtools")
+if (!requireNamespace("presto", quietly = TRUE)) devtools::install_github("immunogenomics/presto")
+
+invisible(lapply(c(list_of_packages, "presto"), library, character.only = TRUE))
 
 # --- Load Data BEFORE ui or server (NON-REACTIVE) ---
 load("/Volumes/DMGE$/teamfolder/Shiny_sc/sc_obj.RData")  # Correct path.  This MUST be a valid path!
