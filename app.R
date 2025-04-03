@@ -10,11 +10,12 @@ if (!requireNamespace("presto", quietly = TRUE)) devtools::install_github("immun
 invisible(lapply(c(list_of_packages, "presto"), library, character.only = TRUE))
 
 # --- Load Data BEFORE ui or server (NON-REACTIVE) ---
-load("/Volumes/DMGE$/teamfolder/Shiny_sc/sc_obj.RData")  # Correct path.  This MUST be a valid path!
+load("/Volumes/DMGE$/teamfolder/Shiny_sc/sc_obj.RData")  
 
 # Ensure 'identity' is a factor
 sc_obj <- SetIdent(sc_obj, value = factor(Idents(sc_obj),
-                                          levels = c("C1", "C2", "C3", "M1", "M2", "M3", "M4", "P1", "P2", "P3", "P4")))  # Adapt if needed
+                                          levels = c("C1", "C2", "C3", "M1", "M2", 
+                                                     "M3", "M4", "P1", "P2", "P3", "P4")))  
 
 
 #Removing Ribossomal, blood, etc
@@ -24,12 +25,11 @@ Rpl.genes <- grep(pattern = "^Rpl", x = rownames(x = sc_obj@assays$RNA), value =
 mito.genes <- grep(pattern = "^mt-", x = rownames(x = sc_obj@assays$RNA), value = TRUE)
 pseudo.genes <- grep(pattern = "^Gm", x = rownames(x = sc_obj@assays$RNA), value = TRUE)
 blood.genes <- c('Hbb-y', 'Hba-a1', 'Hbb-x', 'Hbb-bh1', 'Hba-a2', 'Hbb-bh1', "Hba-x", "Hbb-bs", "Hbb-bt")
-removal <- read.csv(file = "/Volumes/DMGE$/teamfolder/Shiny_sc/remove.csv", header = F) #make sure the path is right
+removal <- read.csv(file = "/Volumes/DMGE$/teamfolder/Shiny_sc/remove.csv", header = F) 
 ychrom <- removal$V2
 ychrom <- ychrom[1:1555]
 xchrom <- removal$V3
 removing <- c(Rps.genes, Rpl.genes, mito.genes, pseudo.genes, blood.genes, ychrom, xchrom, Rik.genes)
-rm(Rps.genes, Rpl.genes, mito.genes, pseudo.genes, blood.genes, ychrom, xchrom) # This line doesn't really do anything useful in a Shiny context.
 all_genes <- rownames(sc_obj@assays$RNA) # Get all available genes from the Seurat object
 genes_to_test <- setdiff(all_genes, removing) # Filter out the excluded genes
 
@@ -55,7 +55,7 @@ ui <- fluidPage(
       br(), br(), br(), br(),
       h4("FeaturePlot & VlnPlot Inputs"),
       textInput("gene", "Enter Gene Name:"),
-      actionButton("updatePlot", "Update Plot"), # Keep the action button
+      actionButton("updatePlot", "Update Plot"), 
       br(),
       downloadButton("downloadFeatureplot", "Download FeaturePlot"),
       downloadButton("downloadVlnplot", "Download VlnPlot"),
@@ -64,7 +64,12 @@ ui <- fluidPage(
       textInput("gene_x", "X-axis Gene:"),
       textInput("gene_y", "Y-axis Gene:"),
       textInput("gene_color", "Color by Gene:"),
+      h4("Cells expressing 3 genes"),
+      br(),
+      tableOutput("triple_cell_count_table"),
+      br(),
       downloadButton("downloadScatterplot", "Download Scatterplot"),
+      br(), br(), br(),
       h4("Total Cells per Genotype"),
       tableOutput("total_cell_count_table"),
       h4("Cell Count by Genotype"),
@@ -87,8 +92,7 @@ ui <- fluidPage(
                card(
                  card_header(div(style = "text-align: center;", strong("Volcano plot"))),
                  plotOutput("de_volcano"),
-                 # Add numericInputs *inside* the Volcano Plot card, below the plot
-                 hr(),  # Add a horizontal line for visual separation
+                 hr(),
                  fluidRow(
                    column(4, numericInput("xlim_min", "X-axis Min:", value = -1)),
                    column(4, numericInput("xlim_max", "X-axis Max:", value = 1)),
@@ -126,15 +130,16 @@ ui <- fluidPage(
                card(
                  card_header(div(style = "text-align: center;", strong("Blended FeaturePlot"))),
                  plotOutput("blendedFeaturePlot"),
-                 hr(), # Horizontal line for separation
+                 hr(), 
                  fluidRow(
-                   column(6, textInput("gene1", "Gene 1:")),
-                   column(6, textInput("gene2", "Gene 2:"))
+                   column(5, textInput("gene1", "Gene 1:")),
+                   column(5, textInput("gene2", "Gene 2:")),
+                   column(5, textInput("color1", "Color Gene 1:", value = "red")),
+                   column(5, textInput("color2", "Color Gene 2:", value = "blue"))))
                  ),
-                 actionButton("updateBlendedPlot", "Update Blended Plot") # Button to trigger plot update
-               )
-        )
-      ),
+                 actionButton("updateBlendedPlot", "Update Blended Plot"),
+                 actionButton("showBlendedPlot", "Split view by genotype") 
+               ),
       fluidRow(
         column(12,
                card(
@@ -263,7 +268,6 @@ server <- function(input, output, session) {
           de_wilcox %>% arrange(padj)
         })
         
-        
         # Render Volcano Plot (inside tryCatch, with dynamic limits)
         output$de_volcano <- renderPlot({
           ggplot(de_wilcox, aes(x = logFC, y = -log10(padj), col = DE, label = DEG)) +
@@ -387,11 +391,10 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       pdf(file, width = 7.5, height = 4.5)
-      print(DimPlot(sc_obj, group.by = 'identity', reduction = "umap", label = TRUE))
+      print(DimPlot(sc_obj, group.by = 'identity', reduction = "umap", label = TRUE, label.size = 6))
       dev.off()
     }
   )
-  
   
   output$downloadFeatureplot <- downloadHandler(
     filename = function() {
@@ -421,7 +424,6 @@ server <- function(input, output, session) {
     }
   )
   
-  
   # Cell count calculation (per genotype, for a given gene)
   output$cell_count_table <- renderTable({
     req(input$gene_count) # Ensure gene is entered
@@ -440,10 +442,27 @@ server <- function(input, output, session) {
     t(as.matrix(total_cell_count))  # Transpose
   }, rownames = TRUE, colnames = TRUE)
   
+  # Cell count calculation (per genotype, for three genes)
+  output$triple_cell_count_table <- renderTable({
+    req(input$gene_x, input$gene_y, input$gene_color) # Ensure all genes are entered
+    
+    # Gene validation
+    if (all(c(input$gene_x, input$gene_y, input$gene_color) %in% rownames(sc_obj))) {
+      gene_expr <- FetchData(sc_obj, vars = c(input$gene_x, input$gene_y, input$gene_color, "genotype"))
+      
+      # Create a combined condition for expression of all three genes
+      combined_expression <- gene_expr[[input$gene_x]] > 0 & 
+        gene_expr[[input$gene_y]] > 0 & 
+        gene_expr[[input$gene_color]] > 0
+      
+      cell_count <- table(subset(gene_expr, combined_expression)$genotype)
+      t(as.matrix(cell_count)) # Transpose for better display
+    }
+  }, rownames = TRUE, colnames = TRUE)
   
   # --- Initial Dimplot (Rendered Once) ---
   output$dimPlot <- renderPlot({
-    DimPlot(sc_obj, group.by = 'identity', reduction = "umap", label = TRUE)
+    DimPlot(sc_obj, group.by = 'identity', reduction = "umap", label = TRUE, label.size = 6)
   })
   
   # --- Show Heatmap in Modal (and calculate markers) ---
@@ -453,14 +472,13 @@ server <- function(input, output, session) {
     showModal(modalDialog(
       title = "Heatmap of Top 10 Markers per Cluster",
       "Calculating markers and rendering heatmap...",  # Initial message
-      plotOutput("heatmap", height = "700px"), # Still include plotOutput
+      plotOutput("heatmap", height = "700px"),  # Still include plotOutput
       easyClose = TRUE,
       footer = tagList(
         modalButton("Close"),
-        downloadButton("downloadHeatmap", "Download Heatmap")
+        downloadButton("downloadHeatmap", "Download PDF")
       )
     ))
-    
     
     # 2. Calculate Markers *INSIDE* the observeEvent, within withProgress
     withProgress(message = "Calculating Markers...", value = 0, {
@@ -510,8 +528,6 @@ server <- function(input, output, session) {
     }
   )
   
-  
-  
   output$scatterPlot <- renderPlot({
     req(input$gene_x, input$gene_y, input$gene_color)
     # Gene Validation
@@ -535,6 +551,7 @@ server <- function(input, output, session) {
   # --- Blended FeaturePlot ---
   observeEvent(input$updateBlendedPlot, {
     req(input$gene1, input$gene2)
+    req(input$color1, input$color2)
     
     # Validate that both genes exist
     validate(
@@ -543,9 +560,78 @@ server <- function(input, output, session) {
     )
     
     output$blendedFeaturePlot <- renderPlot({
+      # Define default colors 
+      default_color1 <- "red"
+      default_color2 <- "blue"
+      default_color3 <- "grey90"  # Default for double-negatives
+      
+      color1_val <- ifelse(is.null(input$color1) || input$color1 == "", default_color1, input$color1)
+      color2_val <- ifelse(is.null(input$color2) || input$color2 == "", default_color2, input$color2)
+      color3_val <- default_color3 # Use default for double-negatives
+      
       FeaturePlot(sc_obj, features = c(input$gene1, input$gene2), blend = TRUE, 
-                  order = T, blend.threshold = 0.1)
+                  order = TRUE, blend.threshold = 0.1, 
+                  cols = c(color3_val, color1_val, color2_val)) 
     })
+  })
+  
+  # --- Show Modal with Split FeaturePlot ---
+  observeEvent(input$showBlendedPlot, {
+    req(input$gene1, input$gene2)
+    req(input$color1, input$color2)
+    
+    validate(
+      need(input$gene1 %in% rownames(sc_obj) && input$gene2 %in% rownames(sc_obj),
+           "One or both of the specified genes were not found in Seurat Object.")
+    )
+    
+    if (input$gene1 %in% rownames(sc_obj) && input$gene2 %in% rownames(sc_obj)){
+      # Define default colors 
+      default_color1 <- "red"
+      default_color2 <- "blue"
+      default_color3 <- "grey90"  # Default for double-negatives
+      
+      color1_val <- ifelse(is.null(input$color1) || input$color1 == "", default_color1, input$color1)
+      color2_val <- ifelse(is.null(input$color2) || input$color2 == "", default_color2, input$color2)
+      color3_val <- default_color3
+      
+      split_plot <- FeaturePlot(sc_obj, features = c(input$gene1, input$gene2), blend = TRUE, 
+                                order = TRUE, blend.threshold = 0.1, 
+                                split.by = 'genotype', 
+                                cols = c(color3_val, color2_val, color1_val))  # Provide 3 colors!
+      
+      showModal(
+        modalDialog(
+          title = "BlendedPlot Split by Genotype",
+          plotOutput("featurePlotSplit", height = "600px", width = "900px"),
+          easyClose = TRUE,
+          footer = tagList(
+            modalButton("Close"),
+            downloadButton("downloadSplitPlot", "Download PDF")
+          )
+        )
+      )
+      
+      output$featurePlotSplit <- renderPlot({
+        split_plot
+      })
+      
+      output$downloadSplitPlot <- downloadHandler(
+        filename = function() {
+          req(input$gene1, input$gene2)
+          if (!is.null(input$gene1) && !is.null(input$gene2)) {
+            paste("BlendedPlot_Split_", input$gene1, "_", input$gene2, ".pdf", sep = "")
+          } else {
+            "BlendedPlot_Split.pdf"
+          }
+        },
+        content = function(file) {
+          pdf(file, width = 12, height = 8)
+          print(split_plot)
+          dev.off()
+        }
+      )
+    }
   })
 }
 
