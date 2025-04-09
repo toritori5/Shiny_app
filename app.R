@@ -598,7 +598,7 @@ server <- function(input, output, session) {
       split_plot <- FeaturePlot(sc_obj, features = c(input$gene1, input$gene2), blend = TRUE, 
                                 order = TRUE, blend.threshold = 0.1, 
                                 split.by = 'genotype', 
-                                cols = c(color3_val, color2_val, color1_val))  # Provide 3 colors!
+                                cols = c(color3_val, color1_val, color2_val))  
       
       showModal(
         modalDialog(
